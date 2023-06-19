@@ -1,31 +1,38 @@
 package main
 
 import (
-	"context"
-	dscClient "discordBot/clients/discord"
-	"discordBot/consumer/event-consumer"
-	"discordBot/events/discord"
+	"discordBot/clients/telegram"
+	event_consumer "discordBot/consumer/event-consumer"
+	fetcher "discordBot/events/Fetcher"
+	"discordBot/events/Processor"
 	"flag"
 	"log"
+	"runtime"
 )
 
 func main() {
 
-	ctx, cancel := context.WithCancel(context.Background())
+	//ctx, cancel := context.WithCancel(context.Background())
 
-	client := dscClient.New(mustToken())
-	client.SetupInterrupt(cancel, ctx)
+	//client := dscClient.New(mustToken())
+	//client.SetupInterrupt(cancel, ctx)
 
-	eventProcessor := discord.New(client)
+	//eventProcessor := discord.New(client)
 
-	log.Printf("service started")
+	//log.Printf("service started")
 
-	consumer := event_consumer.New(eventProcessor, eventProcessor, 100)
+	//consumer := event_consumer.New(eventProcessor, eventProcessor, 100)
 
-	if err := consumer.Start(); err != nil {
-		log.Fatal("service is stopped", err)
-	}
+	//if err := consumer.Start(); err != nil {
+	//	log.Fatal("service is stopped", err)
+	//}
 
+	//TODO: не доделал
+	client := telegram.New("api.telegram.org", "6072205028:AAHmtmZo_9mdxvkxyDQ7HGsGoBOBnHV7jT8", 100)
+	fethcer := fetcher.New(client)
+	processor := Processor.New()
+	consumer := event_consumer.New(fethcer, processor)
+	consumer.Start(runtime.NumCPU())
 }
 
 func mustToken() string {
