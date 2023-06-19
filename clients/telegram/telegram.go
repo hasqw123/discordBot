@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"discordBot/events"
 	"discordBot/lib/e"
 	"encoding/json"
@@ -17,7 +18,9 @@ type TgClient struct {
 	offset   int
 	limit    int
 	client   http.Client
-	Updates  []Update
+	updts    []Update
+	ctx      context.Context
+	isClosed bool
 }
 
 const (
@@ -25,13 +28,14 @@ const (
 	sendMessageMethod = "sendMessage"
 )
 
-func New(host string, token string, limit int) *TgClient {
+func New(host string, token string, bathSize int) *TgClient {
 	return &TgClient{
 		host:     host,
-		limit:    limit,
+		limit:    bathSize,
 		basePath: newBasePath(token),
 		client:   http.Client{},
-		Updates:  make([]Update, 0, limit), //TODO: Продумать про размнр слайса как передвавать
+		updts:    make([]Update, 0, bathSize),
+		ctx:      context.Background(),
 	}
 }
 
@@ -103,28 +107,42 @@ func (c *TgClient) doRequest(method string, q url.Values) (data []byte, err erro
 }
 
 func (c *TgClient) FetchUpdate() (events.Event, error) {
-	if len(c.Updates) != 0 {
-		update := c.event(c.Updates[0])
-		c.Updates = c.Updates[1:]
+	select {
+	case <-c.ctx.Done():
+		return events.Event{}, events.NoEventsError
+	default:
+		if len(c.updts) != 0 {
+			update := c.event(c.updts[0])
+			c.updts = c.updts[1:]
+
+			return update, nil
+		}
+
+		if c.isClosed {
+			return events.Event{}, events.NoEventsError
+		}
+
+		updates, err := c.updates(c.offset, c.limit)
+		if err != nil {
+			return events.Event{}, e.Wrap("can't fetchUpdate", err)
+		}
+
+		if len(updates) == 0 {
+			return events.Event{}, nil
+		}
+
+		update := c.event(updates[0])
+		c.updts = updates[1:]
+		c.offset = updates[len(updates)-1].ID + 1
 
 		return update, nil
 	}
+}
 
-	updates, err := c.updates(c.offset, c.limit)
-	if err != nil {
-		return events.Event{}, e.Wrap("can't fetchUpdate", err)
-	}
-
-	if len(updates) == 0 {
-		return events.Event{}, nil
-	}
-
-	update := c.event(updates[0])
-	c.Updates = updates[1:]
-
-	c.offset = updates[len(updates)-1].ID + 1
-
-	return update, nil
+func (c *TgClient) Close(ctx context.Context) error {
+	c.isClosed = true
+	c.ctx = ctx
+	return nil
 }
 
 func (c *TgClient) event(update Update) events.Event {

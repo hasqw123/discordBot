@@ -1,13 +1,16 @@
 package events
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 type Processor interface {
 	Process(e Event) error
 }
 
 type Fetcher interface {
-	Fetch() (Event, error)
+	Fetch(ctx context.Context) (Event, error)
 }
 
 type Type int
@@ -20,6 +23,7 @@ const (
 var (
 	ErrUnknownEvent    = errors.New("unknown event type ")
 	ErrUnknownMetaType = errors.New("unknown meta type")
+	NoEventsError      = errors.New("events are over")
 )
 
 type Event struct {

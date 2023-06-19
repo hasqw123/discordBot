@@ -1,38 +1,44 @@
 package main
 
 import (
+	"context"
 	"discordBot/clients/telegram"
-	event_consumer "discordBot/consumer/event-consumer"
+	"discordBot/consumer/event-consumer"
 	fetcher "discordBot/events/Fetcher"
 	"discordBot/events/Processor"
 	"flag"
 	"log"
-	"runtime"
+	"os/signal"
+	"syscall"
+)
+
+// TODO: это все нужно будет в аконфиг
+const (
+	tgBotHost                 = "api.telegram.org"
+	batchSize                 = 100
+	amountGoRoutineForHandler = 6
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
-	//ctx, cancel := context.WithCancel(context.Background())
+	client := telegram.New(tgBotHost, "6072205028:AAHmtmZo_9mdxvkxyDQ7HGsGoBOBnHV7jT8", batchSize)
 
-	//client := dscClient.New(mustToken())
-	//client.SetupInterrupt(cancel, ctx)
+	ftr := fetcher.New(batchSize, client)
 
-	//eventProcessor := discord.New(client)
-
-	//log.Printf("service started")
-
-	//consumer := event_consumer.New(eventProcessor, eventProcessor, 100)
-
-	//if err := consumer.Start(); err != nil {
-	//	log.Fatal("service is stopped", err)
-	//}
-
-	//TODO: не доделал
-	client := telegram.New("api.telegram.org", "6072205028:AAHmtmZo_9mdxvkxyDQ7HGsGoBOBnHV7jT8", 100)
-	fethcer := fetcher.New(client)
 	processor := Processor.New()
-	consumer := event_consumer.New(fethcer, processor)
-	consumer.Start(runtime.NumCPU())
+
+	log.Println("service started")
+
+	consumer := event_consumer.New(ctx, ftr, processor)
+	err := consumer.Start(amountGoRoutineForHandler)
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("exit...")
+	log.Println("service stopped")
 }
 
 func mustToken() string {

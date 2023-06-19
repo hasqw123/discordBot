@@ -1,7 +1,11 @@
 package clients
 
-import "discordBot/events"
+import (
+	"context"
+	"discordBot/events"
+)
 
 type Client interface {
 	FetchUpdate() (events.Event, error)
+	Close(ctx context.Context) error
 }
