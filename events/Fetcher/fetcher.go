@@ -25,7 +25,6 @@ func New(bathSize int, cln ...clients.Client) *Fetcher {
 }
 
 func (f *Fetcher) Fetch(ctx context.Context) (events.Event, error) {
-	defer func() { log.Println("fetch stop") }()
 
 	if !f.isStarted {
 		go func() {
@@ -84,14 +83,27 @@ func (f *Fetcher) getEvents() {
 }
 
 func (f *Fetcher) getLastEvents(ctx context.Context) {
-	for _, client := range f.clients {
+	var amountClients, counterError = len(f.clients), 0
+
+	for idx, client := range f.clients {
 		err := client.Close(ctx)
-		if err != nil {
+		switch {
+		case err == events.NoEventsError:
+			f.clients = append(f.clients[:idx], f.clients[idx+1:]...)
+
+			counterError++
+
+			if counterError == amountClients {
+				f.chError <- events.NoEventsError
+
+				return
+			}
+		case err != nil:
 			f.chError <- err
+
+			continue
 		}
 	}
-
-	var amountClients, counterError = len(f.clients), 0
 
 	for {
 		for idx, client := range f.clients {

@@ -6,33 +6,34 @@ import (
 	"discordBot/consumer/event-consumer"
 	fetcher "discordBot/events/Fetcher"
 	"discordBot/events/Processor"
-	"flag"
+	"discordBot/lib/configs"
+	"discordBot/lib/e"
+	"errors"
+	"gopkg.in/yaml.v3"
+	"io"
 	"log"
+	"os"
 	"os/signal"
+	"reflect"
 	"syscall"
 )
 
-// TODO: это все нужно будет в аконфиг
-const (
-	tgBotHost                 = "api.telegram.org"
-	batchSize                 = 100
-	amountGoRoutineForHandler = 6
-)
-
 func main() {
+	config := loadConfig()
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	client := telegram.New(tgBotHost, "6072205028:AAHmtmZo_9mdxvkxyDQ7HGsGoBOBnHV7jT8", batchSize)
+	tgClient := telegram.New(config.TgBot.Host, config.TgBot.Token, config.BatchSize)
 
-	ftr := fetcher.New(batchSize, client)
+	ftr := fetcher.New(config.BatchSize, tgClient)
 
 	processor := Processor.New()
 
 	log.Println("service started")
 
 	consumer := event_consumer.New(ctx, ftr, processor)
-	err := consumer.Start(amountGoRoutineForHandler)
+	err := consumer.Start(config.AmountHandler)
 	if err != nil {
 		log.Println(err)
 	}
@@ -41,19 +42,57 @@ func main() {
 	log.Println("service stopped")
 }
 
-func mustToken() string {
+func loadConfig() configs.Config {
+	config := configs.New()
 
-	token := flag.String(
-		"dsc-bot-token",
-		"",
-		"token for access to discord bot",
-	)
+	yamlConfig, err := os.Open("lib/configs/app.yaml")
+	if err != nil {
+		log.Fatal("can't load config", err)
+	}
+	defer func() { _ = yamlConfig.Close() }()
 
-	flag.Parse()
-
-	if *token == "" {
-		log.Fatal("token is not specified")
+	data, err := io.ReadAll(yamlConfig)
+	if err != nil {
+		log.Fatal("can't load config", err)
 	}
 
-	return *token
+	if err = yaml.Unmarshal(data, &config); err != nil {
+		log.Fatal(e.Wrap("can't load config", err).Error())
+	}
+
+	if err = configCheck(config); err != nil {
+		log.Fatal(e.Wrap("can't load config", err).Error())
+	}
+
+	return config
+}
+
+func configCheck(config interface{}) error {
+	err := errors.New("all config fields are required")
+
+	value := reflect.ValueOf(config)
+	typeValue := value.Type()
+	amount := typeValue.NumField()
+
+	for i := 0; i < amount; i++ {
+		v := value.Field(i)
+		kv := v.Kind()
+
+		switch kv {
+		case reflect.Int:
+			if v.Interface() == 0 {
+				return err
+			}
+		case reflect.String:
+			if v.Interface() == "" {
+				return err
+			}
+		default:
+			if err := configCheck(v.Interface()); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

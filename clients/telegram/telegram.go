@@ -61,6 +61,10 @@ func (c *TgClient) updates(offset, limit int) (updates []Update, err error) {
 		return nil, err
 	}
 
+	if !res.Ok {
+		return nil, RequestError
+	}
+
 	return res.Result, nil
 }
 

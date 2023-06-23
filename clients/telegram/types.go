@@ -1,5 +1,7 @@
 package telegram
 
+import "errors"
+
 type UpdatesResponse struct {
 	Ok     bool     `json:"ok"`
 	Result []Update `json:"result"`
@@ -23,3 +25,5 @@ type From struct {
 type Chat struct {
 	ID int `json:"id"`
 }
+
+var RequestError = errors.New("response with error")
