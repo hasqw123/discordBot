@@ -20,10 +20,11 @@ type TgClient struct {
 	client   http.Client
 	updts    []Update
 	ctx      context.Context
-	isClosed bool
+	isCloses bool
 }
 
 const (
+	tgClient          = "Telegram"
 	getUpdatesMethod  = "getUpdates"
 	sendMessageMethod = "sendMessage"
 )
@@ -116,13 +117,13 @@ func (c *TgClient) FetchUpdate() (events.Event, error) {
 		return events.Event{}, events.NoEventsError
 	default:
 		if len(c.updts) != 0 {
-			update := c.event(c.updts[0])
+			event := c.event(c.updts[0])
 			c.updts = c.updts[1:]
 
-			return update, nil
+			return event, nil
 		}
 
-		if c.isClosed {
+		if c.isCloses {
 			return events.Event{}, events.NoEventsError
 		}
 
@@ -135,17 +136,22 @@ func (c *TgClient) FetchUpdate() (events.Event, error) {
 			return events.Event{}, nil
 		}
 
-		update := c.event(updates[0])
+		event := c.event(updates[0])
 		c.updts = updates[1:]
 		c.offset = updates[len(updates)-1].ID + 1
 
-		return update, nil
+		return event, nil
 	}
 }
 
 func (c *TgClient) Close(ctx context.Context) error {
-	c.isClosed = true
-	c.ctx = ctx
+	c.isCloses = true
+	defer func() { c.ctx = ctx }()
+
+	if len(c.updts) == 0 {
+		return events.NoEventsError
+	}
+
 	return nil
 }
 
@@ -153,9 +159,10 @@ func (c *TgClient) event(update Update) events.Event {
 	updType := fetchType(update)
 
 	res := events.Event{
-		IsEvent: true,
-		Type:    updType,
-		Text:    fetchText(update),
+		FromClient: tgClient,
+		IsEvent:    true,
+		Type:       updType,
+		Text:       fetchText(update),
 	}
 
 	if updType == events.Message {

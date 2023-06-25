@@ -1,9 +1,6 @@
 package discord
 
-import (
-	"errors"
-	"github.com/bwmarrin/discordgo"
-)
+import "github.com/bwmarrin/discordgo"
 
 type Update struct {
 	Type          discordgo.MessageType
@@ -11,12 +8,3 @@ type Update struct {
 	Message       string
 	ChannelID     string
 }
-
-var (
-	botID    string
-	chUpd    chan Update
-	chSend   chan string
-	ErrClose = errors.New("channel cLose")
-)
-
-const sizeCh = 100

@@ -27,7 +27,7 @@ func (p *Processor) processMessage(event events.Event) error {
 		return e.Wrap("can't process message", err)
 	}
 
-	if err := p.doCmd(event.Text, metaMsg); err != nil {
+	if err := p.doCmd(event.Text, metaMsg, event.FromClient); err != nil {
 		return e.Wrap("can't process message", err)
 	}
 

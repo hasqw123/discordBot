@@ -6,9 +6,14 @@ type TgBot struct {
 }
 
 type Config struct {
-	BatchSize     int   `yaml:"batchSize"`
-	AmountHandler int   `yaml:"amountHandler"`
-	TgBot         TgBot `yaml:"tgBot"`
+	BatchSize     int    `yaml:"batchSize"`
+	AmountHandler int    `yaml:"amountHandler"`
+	TgBot         TgBot  `yaml:"tgBot"`
+	DscBot        DscBot `yaml:"dscBot"`
+}
+
+type DscBot struct {
+	Token string `yaml:"token"`
 }
 
 func New() Config {
