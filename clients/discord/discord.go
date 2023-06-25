@@ -2,46 +2,49 @@ package discord
 
 import (
 	"context"
+	"discordBot/events"
 	"discordBot/lib/e"
 	"github.com/bwmarrin/discordgo"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
+	"sync"
 	"time"
 )
 
-type Client struct {
-	conn *discordgo.Session
+type DscClient struct {
+	isCloses bool
+	conn     *discordgo.Session
+	ctx      context.Context
+	mutex    sync.Mutex
 }
 
-func New(token string) *Client {
+const dscClient = "Discord"
+
+var (
+	chUpd chan Update
+)
+
+func New(token string, channelSize int) *DscClient {
 	sess, err := discordgo.New(formatToken(token))
 	if err != nil {
 		log.Fatal("can't creating discord session:", err)
 	}
 
-	u, err := sess.User("@me")
-	if err != nil {
-		log.Fatal("can't get botId: ", err)
-	}
-	botID = u.ID
-	chUpd = make(chan Update, sizeCh)
-	chSend = make(chan string, sizeCh)
-
 	if err = sess.Open(); err != nil {
 		log.Fatal("can't open ws conn:", err)
 	}
 
+	chUpd = make(chan Update, channelSize)
+
 	sess.AddHandler(handler)
 
-	return &Client{
+	return &DscClient{
 		conn: sess,
+		ctx:  context.Background(),
 	}
 }
 
 func handler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID == botID {
+	if m.Author.ID == s.State.User.ID {
 		return
 	}
 
@@ -51,10 +54,23 @@ func handler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		Message:       m.Content,
 		ChannelID:     m.ChannelID,
 	}
+
 	chUpd <- u
 }
 
-func (c *Client) SendMessage(text string, channelID string) error {
+func (c *DscClient) sendMessage(text string, channelID string) error {
+	if c.isCloses {
+		c.mutex.Lock()
+
+		_ = c.conn.Open()
+
+		defer func() {
+			_ = c.conn.Close()
+
+			c.mutex.Unlock()
+		}()
+	}
+
 	_, err := c.conn.ChannelMessageSend(channelID, text)
 	if err != nil {
 		return e.Wrap("can't send message", err)
@@ -63,61 +79,74 @@ func (c *Client) SendMessage(text string, channelID string) error {
 	return nil
 }
 
-func (c *Client) CloseConn() error {
+func formatToken(token string) string {
+	return "Bot " + token
+}
+
+func (c *DscClient) FetchUpdate() (events.Event, error) {
+	select {
+	case <-c.ctx.Done():
+		return events.Event{}, events.NoEventsError
+	case u, ok := <-chUpd:
+		if ok {
+			event := c.event(u)
+
+			return event, nil
+		}
+
+		if c.isCloses {
+			return events.Event{}, events.NoEventsError
+		}
+
+		return events.Event{}, nil
+	case <-time.After(2 * time.Second):
+		return events.Event{}, nil
+	}
+}
+
+func (c *DscClient) Close(ctx context.Context) error {
+	c.isCloses = true
+	defer func() { c.ctx = ctx }()
+
 	if err := c.conn.Close(); err != nil {
-		return e.WrapIfErr("can't close", err)
+		return e.Wrap("can't close connection discord", err)
 	}
 	close(chUpd)
+
+	log.Println("discord: channel for updates and discord connection are closed")
+
+	if len(chUpd) == 0 {
+		return events.NoEventsError
+	}
+
 	return nil
 }
 
-func (c *Client) Updates(limit int) ([]Update, error) {
-	firstValue, open := <-chUpd
-	if !open {
-		return nil, ErrClose
+func (c *DscClient) event(update Update) events.Event {
+	updType := fetchType(update)
+
+	res := events.Event{
+		FromClient: dscClient,
+		IsEvent:    true,
+		Type:       updType,
+		Text:       update.Message,
 	}
 
-	res := make([]Update, 0, limit)
-	res = append(res, firstValue)
-
-	t := time.NewTimer(1 * time.Second)
-
-	for {
-		select {
-		case <-t.C:
-			return res, nil
-		case u := <-chUpd:
-			res = append(res, u)
-			if len(res) == limit {
-				t.Stop()
-				return res, nil
-			}
+	if updType == events.Message {
+		res.Meta = events.MetaMessage{
+			ChatID:        update.ChannelID,
+			UserName:      update.MessageAuthor,
+			ReplyToSender: c.sendMessage,
 		}
 	}
 
+	return res
 }
 
-func (c *Client) SetupInterrupt(cancel context.CancelFunc, ctx context.Context) {
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+func fetchType(update Update) events.Type {
+	if update.Type == 0 {
+		return events.Message
+	}
 
-	go func() {
-		<-sigs
-		cancel()
-	}()
-
-	go func() {
-		<-ctx.Done()
-		_, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		err := c.CloseConn()
-		if err != nil {
-			log.Println("err to close :", err)
-		}
-		log.Println("conn close")
-	}()
-}
-
-func formatToken(token string) string {
-	return "Bot " + token
+	return events.Unknown
 }

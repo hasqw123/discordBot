@@ -27,10 +27,11 @@ var (
 )
 
 type Event struct {
-	IsEvent bool
-	Type    Type
-	Text    string
-	Meta    interface{}
+	FromClient string
+	IsEvent    bool
+	Type       Type
+	Text       string
+	Meta       interface{}
 }
 
 type MetaMessage struct {

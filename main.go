@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"discordBot/clients/discord"
 	"discordBot/clients/telegram"
 	"discordBot/consumer/event-consumer"
 	fetcher "discordBot/events/Fetcher"
@@ -19,14 +20,16 @@ import (
 )
 
 func main() {
-	config := loadConfig()
+	config := loadConfig() //TODO: проверил
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	tgClient := telegram.New(config.TgBot.Host, config.TgBot.Token, config.BatchSize)
 
-	ftr := fetcher.New(config.BatchSize, tgClient)
+	dscBot := discord.New(config.DscBot.Token, config.BatchSize)
+
+	ftr := fetcher.New(config.BatchSize, dscBot, tgClient)
 
 	processor := Processor.New()
 

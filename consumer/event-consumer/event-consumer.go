@@ -29,7 +29,7 @@ func (c *Consumer) Start(amountHandlers int) error {
 
 	for i := 0; i < amountHandlers; i++ {
 		wg.Add(1)
-		go c.handleEvent(c.eventCh, &wg)
+		go c.handleEvent(c.eventCh, &wg, i+1)
 	}
 
 	for {
@@ -43,14 +43,15 @@ func (c *Consumer) Start(amountHandlers int) error {
 			log.Printf("[ERR] consumer %s", err.Error())
 
 			continue
+		case gotEvent.IsEvent:
+			c.eventCh <- gotEvent
+
+			continue
 		}
-
-		c.eventCh <- gotEvent
 	}
-
 }
 
-func (c *Consumer) handleEvent(eventCh chan events.Event, wg *sync.WaitGroup) {
+func (c *Consumer) handleEvent(eventCh chan events.Event, wg *sync.WaitGroup, numberHandler int) {
 	defer wg.Done()
 
 	for event := range eventCh {
@@ -58,5 +59,6 @@ func (c *Consumer) handleEvent(eventCh chan events.Event, wg *sync.WaitGroup) {
 			log.Printf("[ERR] consumer %s", err.Error())
 		}
 	}
-	log.Println("handler finished")
+
+	log.Printf("handler %d finished", numberHandler)
 }

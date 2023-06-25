@@ -10,14 +10,14 @@ const (
 	HelpCmd = "/help"
 )
 
-func (p *Processor) doCmd(text string, metaMsg events.MetaMessage) error {
+func (p *Processor) doCmd(text string, metaMsg events.MetaMessage, fromClient string) error {
 	text = strings.TrimSpace(text)
 
 	switch text {
 	case HelpCmd:
 		return p.sendHelp(metaMsg)
 	default:
-		log.Printf("%s wtite mesage: %s", metaMsg.UserName, text)
+		log.Printf("%s, %s wtite mesage: %s", fromClient, metaMsg.UserName, text)
 
 		return nil
 	}
