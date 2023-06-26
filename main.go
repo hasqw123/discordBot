@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	config := loadConfig()
+	config := loadConfig() //TODO: проверил
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
